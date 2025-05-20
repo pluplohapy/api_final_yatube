@@ -1,8 +1,17 @@
-from rest_framework import serializers
+from rest_framework import serializers, validators
+from posts.models import Post, Group, Comment, Follow
+from django.contrib.auth import get_user_model
 from rest_framework.relations import SlugRelatedField
+from django.shortcuts import get_object_or_404
 
 
-from posts.models import Comment, Post
+User = get_user_model()
+
+
+class GroupSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Group
+        fields = '__all__'
 
 
 class PostSerializer(serializers.ModelSerializer):
@@ -21,3 +30,35 @@ class CommentSerializer(serializers.ModelSerializer):
     class Meta:
         fields = '__all__'
         model = Comment
+        read_only_fields = ('post',)
+
+
+class FollowSerializer(serializers.ModelSerializer):
+    user = serializers.SlugRelatedField(
+        slug_field='username',
+        read_only=True,
+        default=serializers.CurrentUserDefault()
+    )
+    following = serializers.SlugRelatedField(
+        slug_field='username',
+        queryset=User.objects.all()
+    )
+
+    class Meta:
+        model = Follow
+        fields = ('user', 'following')
+        validators = [
+            validators.UniqueTogetherValidator(
+                queryset=Follow.objects.all(),
+                fields=('user', 'following')
+            )
+        ]
+
+    def validate_following(self, value):
+        user = self.context.get('request').user
+        follow = get_object_or_404(User, username=value)
+        if user == follow:
+            raise serializers.ValidationError(
+                'Пользователь не может подписаться на себя!'
+            )
+        return value
